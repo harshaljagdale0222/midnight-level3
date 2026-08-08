@@ -1,0 +1,47 @@
+{
+  "name": "privpass",
+  "version": "1.0.0",
+  "description": "PrivPass – Privacy-Preserving Eligibility & Credential Verification on Midnight Network",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "node src/setup.mjs",
+    "compile": "compact compile contracts/privpass.compact -o contracts/managed",
+    "deploy": "node src/deploy.mjs",
+    "deploy:preview": "node src/deploy.mjs --network preview",
+    "network": "node src/network.mjs",
+    "cli": "node src/cli.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "frontend:dev": "cd frontend && npm run dev",
+    "frontend:build": "cd frontend && npm run build",
+    "frontend:install": "cd frontend && npm install",
+    "frontend:preview": "cd frontend && npm run preview",
+    "devnet:up": "docker compose up -d",
+    "devnet:down": "docker compose down",
+    "devnet:logs": "docker compose logs -f",
+    "devnet:reset": "docker compose down -v && docker compose up -d"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "@types/node": "^22.10.2"
+  },
+  "optionalDependencies": {
+    "@midnight-ntwrk/compact-runtime": "^0.16.0",
+    "@midnight-ntwrk/midnight-js-contracts": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-types": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-network-id": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-wallet": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-testing": "^4.1.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "notes": {
+    "midnight-sdk": "Midnight SDK packages (@midnight-ntwrk/*) are in optionalDependencies. They are only needed for contract deployment and on-chain interaction. The test suite runs without them. Install when ready: npm install @midnight-ntwrk/compact-runtime @midnight-ntwrk/midnight-js-contracts @midnight-ntwrk/midnight-js-types @midnight-ntwrk/midnight-js-network-id @midnight-ntwrk/midnight-js-indexer-public-data-provider @midnight-ntwrk/midnight-js-wallet @midnight-ntwrk/midnight-js-testing"
+  }
+}

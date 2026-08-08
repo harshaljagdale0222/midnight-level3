@@ -1,0 +1,49 @@
+# ── Node & Package managers ──────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ── Build Outputs ────────────────────────────────────────────────
+dist/
+build/
+.tsbuildinfo
+
+# ── Compact Compiler Output (always regenerated) ─────────────────
+contracts/managed/
+
+# ── Midnight Wallet & Deployment Secrets ─────────────────────────
+# ⚠️  NEVER commit these — they contain private keys and seed phrases
+.midnight-state.json
+.midnight-wallet-state/
+.env.local
+*.env.local
+*.seed
+*.key
+*.pem
+
+# ── Environment Variables ─────────────────────────────────────────
+# .env.example IS committed (template only, no real values)
+.env.local
+.env.*.local
+
+# ── Editor & OS ──────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+.vscode/settings.json
+.idea/
+
+# ── Testing & Coverage ───────────────────────────────────────────
+coverage/
+.vitest-cache/
+
+# ── Temporary ────────────────────────────────────────────────────
+*.tmp
+*.bak
+*.swp

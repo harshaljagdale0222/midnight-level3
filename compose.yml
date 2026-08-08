@@ -1,0 +1,59 @@
+# Docker Compose – PrivPass Local Devnet
+# Requires Docker Desktop running with WSL2 backend (or native Linux Docker)
+#
+# Usage:
+#   npm run devnet:up    – Start the devnet stack
+#   npm run devnet:logs  – Tail logs
+#   npm run devnet:down  – Stop the devnet stack
+#
+# Services:
+#   midnight-node    – Local Midnight blockchain node  (port 9944)
+#   indexer          – GraphQL indexer                 (port 8088)
+#   proof-server     – ZK proof generation server      (port 6300)
+
+services:
+  midnight-node:
+    image: ghcr.io/midnight-ntwrk/midnight-node:latest
+    container_name: privpass-midnight-node
+    ports:
+      - "9944:9944"
+      - "9945:9945"
+    environment:
+      - MIDNIGHT_LOG=info
+      - MIDNIGHT_NETWORK=devnet
+    volumes:
+      - midnight-node-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9944/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  indexer:
+    image: ghcr.io/midnight-ntwrk/midnight-indexer:latest
+    container_name: privpass-indexer
+    ports:
+      - "8088:8088"
+    environment:
+      - NODE_URL=ws://midnight-node:9944
+      - INDEXER_PORT=8088
+    depends_on:
+      midnight-node:
+        condition: service_healthy
+    volumes:
+      - indexer-data:/data
+    restart: unless-stopped
+
+  proof-server:
+    image: ghcr.io/midnight-ntwrk/proof-server:latest
+    container_name: privpass-proof-server
+    ports:
+      - "6300:6300"
+    environment:
+      - PROOF_SERVER_PORT=6300
+    restart: unless-stopped
+
+volumes:
+  midnight-node-data:
+  indexer-data:
