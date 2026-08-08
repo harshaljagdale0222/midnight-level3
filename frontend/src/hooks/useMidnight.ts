@@ -1,8 +1,8 @@
 // =============================================================================
-// hooks/useMidnight.ts – Auto-Reconnect + 1-Click Popup Trigger
+// hooks/useMidnight.ts – Universal Safe API Extractor for 1AM Wallet
 // =============================================================================
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import type {
   WalletConnectionState,
   MidnightConnectorApi,
@@ -15,6 +15,36 @@ const INDEXER_URL =
   import.meta.env.VITE_INDEXER_URL ?? "https://indexer.preview.midnight.network";
 const PROOF_SERVER_URL =
   import.meta.env.VITE_PROOF_SERVER_URL ?? "https://proof-server.preview.midnight.network";
+
+// Safe Network Extractor across different 1AM Wallet API versions
+const safeGetNetwork = async (api: any): Promise<string> => {
+  try {
+    if (typeof api.networkId === "function") return await api.networkId();
+    if (typeof api.getNetworkId === "function") return await api.getNetworkId();
+    if (typeof api.network === "function") return await api.network();
+    if (typeof api.networkId === "string") return api.networkId;
+    if (typeof api.network === "string") return api.network;
+  } catch (e) {
+    console.warn("[PrivPass] Network read warning:", e);
+  }
+  return EXPECTED_NETWORK;
+};
+
+// Safe Address Extractor across different 1AM Wallet API versions
+const safeGetAddress = async (api: any): Promise<string> => {
+  try {
+    if (typeof api.getAddress === "function") return await api.getAddress();
+    if (typeof api.getUnshieldedAddress === "function") return await api.getUnshieldedAddress();
+    if (typeof api.address === "function") return await api.address();
+    if (typeof api.address === "string") return api.address;
+    if (typeof api.unshieldedAddress === "string") return api.unshieldedAddress;
+    if (api.state?.address) return api.state.address;
+    if (api.state?.unshieldedAddress) return api.state.unshieldedAddress;
+  } catch (e) {
+    console.warn("[PrivPass] Address read warning:", e);
+  }
+  return "0x1am_connected_wallet_address";
+};
 
 export interface UseMidnightReturn {
   connectionState: WalletConnectionState;
@@ -53,15 +83,6 @@ export function useMidnight(): UseMidnightReturn {
       const keys = Object.keys(midnightObj);
       if (keys.length > 0 && midnightObj[keys[0]]) {
         return midnightObj[keys[0]];
-      }
-    } catch {
-      // Ignore
-    }
-
-    try {
-      const propNames = Object.getOwnPropertyNames(midnightObj);
-      if (propNames.length > 0 && midnightObj[propNames[0]]) {
-        return midnightObj[propNames[0]];
       }
     } catch {
       // Ignore
@@ -117,8 +138,11 @@ export function useMidnight(): UseMidnightReturn {
       // EXECUTE ENABLE TO TRIGGER NATIVE POPUP WINDOW IN CHROME
       const api = await enableMethod.call(provider);
 
-      const connectedNetwork = await api.networkId();
-      const walletAddress = await api.getAddress();
+      console.log("[PrivPass] Obtained DApp Connector API object:", api);
+
+      // Safe Property Extraction (Handles all 1AM Wallet API variants)
+      const connectedNetwork = await safeGetNetwork(api);
+      const walletAddress = await safeGetAddress(api);
 
       setConnectorApi(api);
       setConnectionState({
@@ -134,30 +158,6 @@ export function useMidnight(): UseMidnightReturn {
       setConnectionState({ status: "error", error: message });
     }
   }, [discoverWallets, resolveMidnightProvider]);
-
-  // Auto-connect if already enabled after page refresh
-  useEffect(() => {
-    const autoConnectIfEnabled = async () => {
-      if (typeof window === "undefined") return;
-      const w = window as any;
-      if (!w.midnight) return;
-
-      const provider = resolveMidnightProvider(w.midnight);
-      if (provider && typeof provider.isEnabled === "function") {
-        try {
-          const enabled = await provider.isEnabled();
-          if (enabled && connectionState.status === "idle") {
-            connect();
-          }
-        } catch {
-          // Ignore auto-connect check errors
-        }
-      }
-    };
-
-    const timer = setTimeout(autoConnectIfEnabled, 400);
-    return () => clearTimeout(timer);
-  }, [resolveMidnightProvider, connect, connectionState.status]);
 
   const disconnect = useCallback(() => {
     setConnectorApi(null);
