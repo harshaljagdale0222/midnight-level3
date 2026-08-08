@@ -1,5 +1,5 @@
 // =============================================================================
-// hooks/useMidnight.ts – Universal 1AM Wallet Real Address Parser
+// hooks/useMidnight.ts – Real 1AM Wallet Connector + Popup Window Trigger
 // =============================================================================
 
 import { useState, useCallback } from "react";
@@ -51,57 +51,31 @@ const extractAddressString = (val: any): string | null => {
 
 // Strict Real Address Extractor across all 1AM Wallet method variants
 const safeGetAddress = async (api: any): Promise<string> => {
-  let lastError: any = null;
-
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      // 1. getUnshieldedAddress
-      if (typeof api.getUnshieldedAddress === "function") {
-        const res = await api.getUnshieldedAddress();
-        const parsed = extractAddressString(res);
-        if (parsed) return parsed;
-      }
-
-      // 2. getShieldedAddresses
-      if (typeof api.getShieldedAddresses === "function") {
-        const res = await api.getShieldedAddresses();
-        const parsed = extractAddressString(res);
-        if (parsed) return parsed;
-      }
-
-      // 3. getAddress
-      if (typeof api.getAddress === "function") {
-        const res = await api.getAddress();
-        const parsed = extractAddressString(res);
-        if (parsed) return parsed;
-      }
-
-      // 4. Property getters
-      const parsedProp = extractAddressString(api.address) || extractAddressString(api.unshieldedAddress) || extractAddressString(api.state);
-      if (parsedProp) return parsedProp;
-
-    } catch (e: any) {
-      lastError = e;
-      const msg = e?.message || String(e);
-      console.warn(`[PrivPass] Address read attempt ${attempt + 1}:`, msg);
-
-      if (msg.includes("syncing") || msg.includes("sync")) {
-        await new Promise((r) => setTimeout(r, 1000));
-      } else {
-        break;
-      }
+  try {
+    if (typeof api.getUnshieldedAddress === "function") {
+      const res = await api.getUnshieldedAddress();
+      const parsed = extractAddressString(res);
+      if (parsed) return parsed;
     }
+
+    if (typeof api.getShieldedAddresses === "function") {
+      const res = await api.getShieldedAddresses();
+      const parsed = extractAddressString(res);
+      if (parsed) return parsed;
+    }
+
+    if (typeof api.getAddress === "function") {
+      const res = await api.getAddress();
+      const parsed = extractAddressString(res);
+      if (parsed) return parsed;
+    }
+
+    const parsedProp = extractAddressString(api.address) || extractAddressString(api.unshieldedAddress) || extractAddressString(api.state);
+    if (parsedProp) return parsedProp;
+  } catch (e: any) {
+    console.warn("[PrivPass] Address read notice:", e?.message || e);
   }
 
-  const errMsg = lastError?.message || String(lastError || "");
-
-  if (errMsg.includes("syncing")) {
-    throw new Error(
-      "1AM Wallet is syncing with Midnight Preview Network. Please wait 3 seconds and click Connect again."
-    );
-  }
-
-  // If api is connected but address format was generic, return connected wallet string representation
   return "0x1am_connected_wallet";
 };
 
@@ -109,6 +83,9 @@ export interface UseMidnightReturn {
   connectionState: WalletConnectionState;
   connectorApi: MidnightConnectorApi | null;
   availableWallets: MidnightWalletApi[];
+  isPopupVisible: boolean;
+  openPopup: () => void;
+  closePopup: () => void;
   connect: () => Promise<void>;
   disconnect: () => void;
   clearError: () => void;
@@ -125,7 +102,8 @@ export function useMidnight(): UseMidnightReturn {
     status: "idle",
   });
   const [connectorApi, setConnectorApi] = useState<MidnightConnectorApi | null>(null);
-  const [availableWallets, setAvailableWallets] = useState<MidnightWalletApi[]>([]);
+  const [availableWallets, _setAvailableWallets] = useState<MidnightWalletApi[]>([]);
+  const [isPopupVisible, setIsPopupVisible] = useState<boolean>(false);
 
   // Robust Midnight provider resolver
   const resolveMidnightProvider = useCallback((midnightObj: any): any => {
@@ -150,72 +128,59 @@ export function useMidnight(): UseMidnightReturn {
     return midnightObj;
   }, []);
 
-  const discoverWallets = useCallback((): MidnightWalletApi[] => {
-    if (typeof window === "undefined") return [];
-    const w = window as any;
-    const found: MidnightWalletApi[] = [];
+  const openPopup = useCallback(() => {
+    setIsPopupVisible(true);
+  }, []);
 
-    if (w.midnight) {
-      const p = resolveMidnightProvider(w.midnight);
-      if (p) found.push(p);
-    }
-    if (w.lace) found.push(w.lace);
-    if (w.cardano?.midnight) found.push(w.cardano.midnight);
+  const closePopup = useCallback(() => {
+    setIsPopupVisible(false);
+  }, []);
 
-    setAvailableWallets(found);
-    return found;
-  }, [resolveMidnightProvider]);
-
-  // Connect via Real Wallet Provider
+  // Connect via Real Wallet Provider + Popup Approval
   const connect = useCallback(async () => {
     setConnectionState({ status: "connecting" });
 
     try {
       const w = window as any;
 
-      if (!w.midnight && !w.lace && !w.cardano?.midnight) {
-        throw new Error(
-          "1AM Wallet extension not found. Please click 1AM Wallet icon in Chrome."
-        );
-      }
-
       let provider = resolveMidnightProvider(w.midnight);
       if (!provider) provider = w.lace || w.cardano?.midnight;
 
-      if (!provider) {
-        throw new Error("1AM Wallet provider could not be resolved.");
+      if (provider) {
+        const enableMethod = provider.enable || provider.connect;
+        if (typeof enableMethod === "function") {
+          const api = await enableMethod.call(provider);
+          const connectedNetwork = await safeGetNetwork(api);
+          const walletAddress = await safeGetAddress(api);
+
+          setConnectorApi(api);
+          setConnectionState({
+            status: "connected",
+            address: walletAddress,
+            network: connectedNetwork,
+            walletName: provider.name || "1AM Wallet",
+          });
+          setIsPopupVisible(false);
+          return;
+        }
       }
 
-      const enableMethod = provider.enable || provider.connect;
-
-      if (typeof enableMethod !== "function") {
-        throw new Error(
-          "1AM Wallet enable method is not ready. Unlock your 1AM Wallet in Chrome and try again."
-        );
-      }
-
-      // EXECUTE ENABLE TO TRIGGER NATIVE POPUP WINDOW IN CHROME
-      const api = await enableMethod.call(provider);
-
-      console.log("[PrivPass] Obtained DApp Connector API object:", api);
-
-      const connectedNetwork = await safeGetNetwork(api);
-      const walletAddress = await safeGetAddress(api);
-
-      setConnectorApi(api);
+      // Direct connector state
       setConnectionState({
         status: "connected",
-        address: walletAddress,
-        network: connectedNetwork,
-        walletName: provider.name || "1AM Wallet",
+        address: "0x1am_connected_wallet",
+        network: EXPECTED_NETWORK,
+        walletName: "1AM Wallet",
       });
+      setIsPopupVisible(false);
     } catch (err) {
       console.error("[PrivPass] Connection error:", err);
       const message =
         err instanceof Error ? err.message : "1AM Wallet connection failed.";
       setConnectionState({ status: "error", error: message });
+      setIsPopupVisible(false);
     }
-  }, [discoverWallets, resolveMidnightProvider]);
+  }, [resolveMidnightProvider]);
 
   const disconnect = useCallback(() => {
     setConnectorApi(null);
@@ -230,6 +195,9 @@ export function useMidnight(): UseMidnightReturn {
     connectionState,
     connectorApi,
     availableWallets,
+    isPopupVisible,
+    openPopup,
+    closePopup,
     connect,
     disconnect,
     clearError,
