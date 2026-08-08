@@ -1,5 +1,5 @@
 // =============================================================================
-// hooks/useMidnight.ts – Universal 1AM / Midnight Connector + Auto Permission Retry
+// hooks/useMidnight.ts – Direct 1AM Wallet Extension Connector
 // =============================================================================
 
 import { useState, useCallback, useEffect } from "react";
@@ -20,7 +20,7 @@ export interface UseMidnightReturn {
   connectionState: WalletConnectionState;
   connectorApi: MidnightConnectorApi | null;
   availableWallets: MidnightWalletApi[];
-  connect: (walletId?: string) => Promise<void>;
+  connect: () => Promise<void>;
   disconnect: () => void;
   clearError: () => void;
   config: {
@@ -38,91 +38,70 @@ export function useMidnight(): UseMidnightReturn {
   const [connectorApi, setConnectorApi] = useState<MidnightConnectorApi | null>(null);
   const [availableWallets, setAvailableWallets] = useState<MidnightWalletApi[]>([]);
 
-  // Discover all injected wallet providers in window
+  // Scan injected window.midnight object
   const discoverWallets = useCallback((): MidnightWalletApi[] => {
-    if (typeof window === "undefined") return [];
-
+    if (typeof window === "undefined" || !window.midnight) return [];
     const w = window as any;
-    const providers: MidnightWalletApi[] = [];
+    const found: MidnightWalletApi[] = [];
 
-    const addIfValid = (obj: any, id: string, name: string) => {
-      if (obj && typeof obj.enable === "function") {
-        providers.push({
-          serviceId: id,
-          name: obj.name || name,
-          icon: obj.icon,
-          apiVersion: obj.apiVersion || "0.1.0",
-          enable: obj.enable.bind(obj),
-          isEnabled: obj.isEnabled ? obj.isEnabled.bind(obj) : async () => false,
-        });
-      }
-    };
-
-    if (w.midnight) {
-      addIfValid(w.midnight, "midnight_direct", "1AM Wallet");
-
-      const knownKeys = ["mnLace", "1am-wallet", "1am", "midnight", "lace", "provider", "mn", "night"];
-      knownKeys.forEach((key) => {
-        addIfValid(w.midnight[key], key, key);
-      });
-
-      try {
-        Object.keys(w.midnight).forEach((key) => {
-          if (!knownKeys.includes(key)) {
-            addIfValid(w.midnight[key], key, key);
-          }
-        });
-      } catch {
-        // Ignore
-      }
+    if (typeof w.midnight.enable === "function") {
+      found.push(w.midnight);
     }
+    Object.keys(w.midnight).forEach((key) => {
+      const provider = w.midnight[key];
+      if (provider && typeof provider.enable === "function") {
+        found.push(provider);
+      }
+    });
 
-    addIfValid(w.lace, "lace_root", "Lace Wallet");
-    if (w.cardano?.midnight) {
-      addIfValid(w.cardano.midnight, "cardano_midnight", "Midnight Wallet");
-    }
-
-    setAvailableWallets(providers);
-    return providers;
+    setAvailableWallets(found);
+    return found;
   }, []);
 
   useEffect(() => {
     discoverWallets();
-    const interval = setInterval(discoverWallets, 300);
+    const interval = setInterval(discoverWallets, 500);
     return () => clearInterval(interval);
   }, [discoverWallets]);
 
-  // Connect via real Midnight DApp Connector
-  const connect = useCallback(async (walletId?: string) => {
+  // DIRECT 1-CLICK EXTENSION POPUP TRIGGER
+  const connect = useCallback(async () => {
     setConnectionState({ status: "connecting" });
 
     try {
       const w = window as any;
-      const providers = discoverWallets();
 
-      let targetProvider: any = null;
+      // Find provider in window.midnight or retry up to 1 second
+      let provider: any = null;
 
-      if (providers.length > 0) {
-        targetProvider = walletId
-          ? providers.find((p) => p.serviceId === walletId) || providers[0]
-          : providers[0];
-      } else if (w.midnight) {
-        targetProvider =
-          w.midnight.mnLace ||
-          w.midnight["1am-wallet"] ||
-          w.midnight.midnight ||
-          w.midnight["1am"] ||
-          (typeof w.midnight.enable === "function" ? w.midnight : null);
+      for (let attempt = 0; attempt < 10; attempt++) {
+        if (w.midnight) {
+          provider =
+            w.midnight.mnLace ||
+            w.midnight["1am-wallet"] ||
+            w.midnight.midnight ||
+            w.midnight["1am"] ||
+            (typeof w.midnight.enable === "function" ? w.midnight : null);
+
+          if (!provider) {
+            const keys = Object.keys(w.midnight);
+            if (keys.length > 0) provider = w.midnight[keys[0]];
+          }
+        }
+        if (!provider) provider = w.lace || w.cardano?.midnight;
+
+        if (provider && typeof provider.enable === "function") break;
+        await new Promise((r) => setTimeout(r, 100));
       }
 
-      if (!targetProvider || typeof targetProvider.enable !== "function") {
+      if (!provider || typeof provider.enable !== "function") {
         throw new Error(
-          "Chrome status shows 'Action required'. Chrome is blocking the extension script. Click the orange 'Action required' button at the top right of Chrome and select 'Allow on localhost'."
+          "1AM Wallet extension popup request failed. Please check if your 1AM Wallet extension is unlocked in Chrome."
         );
       }
 
-      // OPENS NATIVE EXTENSION POPUP WINDOW IN CHROME
-      const api = await targetProvider.enable();
+      // THIS DIRECT CALL LAUNCHES THE CHROME EXTENSION POPUP WINDOW
+      const api = await provider.enable();
 
       const connectedNetwork = await api.networkId();
       const walletAddress = await api.getAddress();
@@ -132,14 +111,14 @@ export function useMidnight(): UseMidnightReturn {
         status: "connected",
         address: walletAddress,
         network: connectedNetwork,
-        walletName: targetProvider.name || "1AM Wallet",
+        walletName: provider.name || "1AM Wallet",
       });
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "1AM Wallet connection failed.";
+        err instanceof Error ? err.message : "1AM Wallet connection popup failed.";
       setConnectionState({ status: "error", error: message });
     }
-  }, [discoverWallets]);
+  }, []);
 
   const disconnect = useCallback(() => {
     setConnectorApi(null);
