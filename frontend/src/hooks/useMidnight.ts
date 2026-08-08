@@ -1,5 +1,5 @@
 // =============================================================================
-// hooks/useMidnight.ts – Universal Safe API Extractor for 1AM Wallet
+// hooks/useMidnight.ts – Real 1AM Wallet Connector + Syncing State Handler
 // =============================================================================
 
 import { useState, useCallback } from "react";
@@ -30,20 +30,37 @@ const safeGetNetwork = async (api: any): Promise<string> => {
   return EXPECTED_NETWORK;
 };
 
-// Safe Address Extractor across different 1AM Wallet API versions
+// Safe Address Extractor handling 1AM Wallet Syncing state
 const safeGetAddress = async (api: any): Promise<string> => {
-  try {
-    if (typeof api.getAddress === "function") return await api.getAddress();
-    if (typeof api.getUnshieldedAddress === "function") return await api.getUnshieldedAddress();
-    if (typeof api.address === "function") return await api.address();
-    if (typeof api.address === "string") return api.address;
-    if (typeof api.unshieldedAddress === "string") return api.unshieldedAddress;
-    if (api.state?.address) return api.state.address;
-    if (api.state?.unshieldedAddress) return api.state.unshieldedAddress;
-  } catch (e) {
-    console.warn("[PrivPass] Address read warning:", e);
+  let lastError: any = null;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      if (typeof api.getAddress === "function") return await api.getAddress();
+      if (typeof api.getUnshieldedAddress === "function") return await api.getUnshieldedAddress();
+      if (typeof api.address === "function") return await api.address();
+      if (typeof api.address === "string") return api.address;
+      if (typeof api.unshieldedAddress === "string") return api.unshieldedAddress;
+      if (api.state?.address) return api.state.address;
+    } catch (e: any) {
+      lastError = e;
+      const msg = e?.message || String(e);
+      if (msg.includes("syncing") || msg.includes("sync")) {
+        console.warn("[PrivPass] 1AM Wallet is syncing in background...");
+        await new Promise((r) => setTimeout(r, 1500));
+      } else {
+        break;
+      }
+    }
   }
-  return "0x1am_connected_wallet_address";
+
+  if (lastError?.message?.includes("syncing")) {
+    throw new Error(
+      "1AM Wallet is currently syncing with Midnight Preview Network. Open your 1AM Wallet icon in Chrome and wait a few seconds for sync to finish."
+    );
+  }
+
+  throw new Error("Could not read address from 1AM Wallet.");
 };
 
 export interface UseMidnightReturn {
@@ -140,7 +157,7 @@ export function useMidnight(): UseMidnightReturn {
 
       console.log("[PrivPass] Obtained DApp Connector API object:", api);
 
-      // Safe Property Extraction (Handles all 1AM Wallet API variants)
+      // Safe Property Extraction (Handles 1AM Wallet Syncing State)
       const connectedNetwork = await safeGetNetwork(api);
       const walletAddress = await safeGetAddress(api);
 
