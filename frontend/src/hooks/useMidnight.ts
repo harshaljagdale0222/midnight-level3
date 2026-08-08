@@ -1,5 +1,5 @@
 // =============================================================================
-// hooks/useMidnight.ts – Universal Safe API Extractor for 1AM Wallet
+// hooks/useMidnight.ts – 100% Real 1AM Wallet Connector (Strict Real Address Only)
 // =============================================================================
 
 import { useState, useCallback } from "react";
@@ -16,7 +16,7 @@ const INDEXER_URL =
 const PROOF_SERVER_URL =
   import.meta.env.VITE_PROOF_SERVER_URL ?? "https://proof-server.preview.midnight.network";
 
-// Safe Network Extractor across different 1AM Wallet API versions
+// Safe Network Extractor
 const safeGetNetwork = async (api: any): Promise<string> => {
   try {
     if (typeof api.networkId === "function") return await api.networkId();
@@ -30,39 +30,59 @@ const safeGetNetwork = async (api: any): Promise<string> => {
   return EXPECTED_NETWORK;
 };
 
-// Safe Address Extractor handling 1AM Wallet Syncing State gracefully
+// Strict Real Address Extractor (Throws if wallet is locked or syncing)
 const safeGetAddress = async (api: any): Promise<string> => {
-  try {
-    // 1. getUnshieldedAddress
-    if (typeof api.getUnshieldedAddress === "function") {
-      const res = await api.getUnshieldedAddress();
-      if (typeof res === "string" && res.length > 0) return res;
-      if (Array.isArray(res) && res.length > 0) return res[0];
-    }
+  let lastError: any = null;
 
-    // 2. getShieldedAddresses
-    if (typeof api.getShieldedAddresses === "function") {
-      const res = await api.getShieldedAddresses();
-      if (Array.isArray(res) && res.length > 0) return res[0];
-      if (typeof res === "string" && res.length > 0) return res;
-    }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      // 1. getUnshieldedAddress (Primary 1AM Wallet method)
+      if (typeof api.getUnshieldedAddress === "function") {
+        const res = await api.getUnshieldedAddress();
+        if (typeof res === "string" && res.length > 5) return res;
+        if (Array.isArray(res) && res.length > 0 && typeof res[0] === "string") return res[0];
+      }
 
-    // 3. getAddress
-    if (typeof api.getAddress === "function") {
-      const res = await api.getAddress();
-      if (typeof res === "string" && res.length > 0) return res;
-      if (Array.isArray(res) && res.length > 0) return res[0];
-    }
+      // 2. getShieldedAddresses
+      if (typeof api.getShieldedAddresses === "function") {
+        const res = await api.getShieldedAddresses();
+        if (Array.isArray(res) && res.length > 0 && typeof res[0] === "string") return res[0];
+        if (typeof res === "string" && res.length > 5) return res;
+      }
 
-    if (typeof api.address === "string") return api.address;
-    if (typeof api.unshieldedAddress === "string") return api.unshieldedAddress;
-    if (api.state?.address) return api.state.address;
-  } catch (e: any) {
-    console.warn("[PrivPass] Wallet syncing notice:", e?.message || e);
+      // 3. getAddress
+      if (typeof api.getAddress === "function") {
+        const res = await api.getAddress();
+        if (typeof res === "string" && res.length > 5) return res;
+        if (Array.isArray(res) && res.length > 0 && typeof res[0] === "string") return res[0];
+      }
+
+      if (typeof api.address === "string" && api.address.length > 5) return api.address;
+      if (typeof api.unshieldedAddress === "string" && api.unshieldedAddress.length > 5) return api.unshieldedAddress;
+    } catch (e: any) {
+      lastError = e;
+      const msg = e?.message || String(e);
+      console.warn(`[PrivPass] Address read attempt ${attempt + 1}:`, msg);
+
+      if (msg.includes("syncing") || msg.includes("sync")) {
+        await new Promise((r) => setTimeout(r, 1000));
+      } else {
+        break;
+      }
+    }
   }
 
-  // Always return active 1AM connected wallet address so connection never fails during sync
-  return "0x1am_preview_wallet_address";
+  const errMsg = lastError?.message || String(lastError || "");
+
+  if (errMsg.includes("syncing")) {
+    throw new Error(
+      "1AM Wallet is syncing with Midnight Preview Network. Please wait 3 seconds and click Connect again."
+    );
+  }
+
+  throw new Error(
+    "1AM Wallet is locked. Enter your password in 1AM Wallet extension to unlock, then click Connect."
+  );
 };
 
 export interface UseMidnightReturn {
@@ -126,7 +146,7 @@ export function useMidnight(): UseMidnightReturn {
     return found;
   }, [resolveMidnightProvider]);
 
-  // Connect via Real Wallet Provider (triggers Chrome Extension Popup)
+  // Connect via Real Wallet Provider (Strict Real Address Only)
   const connect = useCallback(async () => {
     setConnectionState({ status: "connecting" });
 
@@ -159,14 +179,14 @@ export function useMidnight(): UseMidnightReturn {
 
       console.log("[PrivPass] Obtained DApp Connector API object:", api);
 
-      // Safe Property Extraction
+      // Read STRICT REAL ADDRESS ONLY (Throws if locked)
       const connectedNetwork = await safeGetNetwork(api);
       const walletAddress = await safeGetAddress(api);
 
       setConnectorApi(api);
       setConnectionState({
         status: "connected",
-        address: walletAddress,
+        address: walletAddress, // STRICT REAL ADDRESS FROM EXTENSION ONLY
         network: connectedNetwork,
         walletName: provider.name || "1AM Wallet",
       });
