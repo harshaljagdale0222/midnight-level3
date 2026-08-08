@@ -1,5 +1,5 @@
 // =============================================================================
-// hooks/useMidnight.ts – Fail-Proof 1AM Wallet Extension Connector
+// hooks/useMidnight.ts – 100% Real Midnight DApp Connector (Zero Dummy Address)
 // =============================================================================
 
 import { useState, useCallback, useEffect } from "react";
@@ -21,7 +21,6 @@ export interface UseMidnightReturn {
   connectorApi: MidnightConnectorApi | null;
   availableWallets: MidnightWalletApi[];
   connect: () => Promise<void>;
-  connectWithAddress: (customAddress: string) => void;
   disconnect: () => void;
   clearError: () => void;
   config: {
@@ -41,23 +40,19 @@ export function useMidnight(): UseMidnightReturn {
 
   // Scan injected window.midnight object
   const discoverWallets = useCallback((): MidnightWalletApi[] => {
-    if (typeof window === "undefined") return [];
+    if (typeof window === "undefined" || !window.midnight) return [];
     const w = window as any;
     const found: MidnightWalletApi[] = [];
 
-    if (w.midnight) {
-      if (typeof w.midnight.enable === "function") found.push(w.midnight);
-      Object.keys(w.midnight).forEach((key) => {
-        const provider = w.midnight[key];
-        if (provider && typeof provider.enable === "function") {
-          found.push(provider);
-        }
-      });
+    if (typeof w.midnight.enable === "function") {
+      found.push(w.midnight);
     }
-
-    if (w.lace && typeof w.lace.enable === "function") found.push(w.lace);
-    if (w.cardano?.midnight && typeof w.cardano.midnight.enable === "function")
-      found.push(w.cardano.midnight);
+    Object.keys(w.midnight).forEach((key) => {
+      const provider = w.midnight[key];
+      if (provider && typeof provider.enable === "function") {
+        found.push(provider);
+      }
+    });
 
     setAvailableWallets(found);
     return found;
@@ -65,16 +60,25 @@ export function useMidnight(): UseMidnightReturn {
 
   useEffect(() => {
     discoverWallets();
-    const interval = setInterval(discoverWallets, 300);
+    const interval = setInterval(discoverWallets, 500);
     return () => clearInterval(interval);
   }, [discoverWallets]);
 
-  // Connect handler — tries native extension enable first, or connects address
+  // Connect handler — ONLY real wallet connection (Zero dummy fallback string)
   const connect = useCallback(async () => {
     setConnectionState({ status: "connecting" });
 
     try {
       const w = window as any;
+
+      console.log("[PrivPass] Scanning window object for Midnight provider...");
+      console.log("[PrivPass] window.midnight:", w.midnight);
+
+      if (!w.midnight && !w.lace && !w.cardano?.midnight) {
+        throw new Error(
+          "1AM / Midnight Wallet extension is not injected into `window.midnight` on this page (http://localhost:5173). Please check Chrome extension permissions."
+        );
+      }
 
       let provider: any =
         w.midnight?.mnLace ||
@@ -90,74 +94,31 @@ export function useMidnight(): UseMidnightReturn {
 
       if (!provider) provider = w.lace || w.cardano?.midnight;
 
-      if (provider && typeof provider.enable === "function") {
-        // Native Chrome extension popup call
-        const api = await provider.enable();
-        const connectedNetwork = await api.networkId();
-        const walletAddress = await api.getAddress();
-
-        setConnectorApi(api);
-        setConnectionState({
-          status: "connected",
-          address: walletAddress,
-          network: connectedNetwork,
-          walletName: provider.name || "1AM Wallet",
-        });
-        return;
+      if (!provider || typeof provider.enable !== "function") {
+        throw new Error(
+          "Midnight wallet provider not found in window.midnight. Please ensure 1AM Wallet extension is enabled for all sites in chrome://extensions."
+        );
       }
 
-      // If window.midnight is not injected, connect with 1AM address format
-      const defaultAddress = "0x1am_user_preview_wallet_address";
-      const mockApi: MidnightConnectorApi = {
-        networkId: async () => EXPECTED_NETWORK,
-        getAddress: async () => defaultAddress,
-        balances: async () => ({ dust: 500000000n }),
-        submitTransaction: async () =>
-          "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32)))
-            .map((b) => b.toString(16).padStart(2, "0"))
-            .join(""),
-        balanceTransaction: async (tx) => tx,
-        proveTransaction: async (tx) => tx,
-      };
+      // THIS DIRECT CALL OPENS THE CHROME EXTENSION POPUP
+      const api = await provider.enable();
+      const connectedNetwork = await api.networkId();
+      const walletAddress = await api.getAddress();
 
-      setConnectorApi(mockApi);
+      setConnectorApi(api);
       setConnectionState({
         status: "connected",
-        address: defaultAddress,
-        network: EXPECTED_NETWORK,
-        walletName: "1AM Wallet",
+        address: walletAddress, // REAL address from extension only
+        network: connectedNetwork,
+        walletName: provider.name || "1AM Wallet",
       });
     } catch (err) {
+      console.error("[PrivPass] Connect error:", err);
       const message =
-        err instanceof Error ? err.message : "1AM Wallet connection error.";
+        err instanceof Error ? err.message : "1AM Wallet connection failed.";
       setConnectionState({ status: "error", error: message });
     }
   }, [discoverWallets]);
-
-  const connectWithAddress = useCallback((userAddress: string) => {
-    const cleanAddress = userAddress.trim() || "0x1am_preview_wallet_address";
-    setConnectionState({ status: "connecting" });
-
-    const mockApi: MidnightConnectorApi = {
-      networkId: async () => EXPECTED_NETWORK,
-      getAddress: async () => cleanAddress,
-      balances: async () => ({ dust: 500000000n }),
-      submitTransaction: async () =>
-        "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32)))
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join(""),
-      balanceTransaction: async (tx) => tx,
-      proveTransaction: async (tx) => tx,
-    };
-
-    setConnectorApi(mockApi);
-    setConnectionState({
-      status: "connected",
-      address: cleanAddress,
-      network: EXPECTED_NETWORK,
-      walletName: "1AM Wallet",
-    });
-  }, []);
 
   const disconnect = useCallback(() => {
     setConnectorApi(null);
@@ -173,7 +134,6 @@ export function useMidnight(): UseMidnightReturn {
     connectorApi,
     availableWallets,
     connect,
-    connectWithAddress,
     disconnect,
     clearError,
     config: {
