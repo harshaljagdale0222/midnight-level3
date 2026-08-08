@@ -1,5 +1,5 @@
 // =============================================================================
-// hooks/useMidnight.ts – 100% Real Midnight DApp Connector (Zero Dummy Address)
+// hooks/useMidnight.ts – Universal 1AM / Midnight Provider Resolution
 // =============================================================================
 
 import { useState, useCallback, useEffect } from "react";
@@ -38,25 +38,57 @@ export function useMidnight(): UseMidnightReturn {
   const [connectorApi, setConnectorApi] = useState<MidnightConnectorApi | null>(null);
   const [availableWallets, setAvailableWallets] = useState<MidnightWalletApi[]>([]);
 
-  // Scan injected window.midnight object
+  // Robust Midnight provider resolver (handles Manifest V3 proxies & getters)
+  const resolveMidnightProvider = useCallback((midnightObj: any): any => {
+    if (!midnightObj) return null;
+
+    // 1. Direct enable on window.midnight
+    if (typeof midnightObj.enable === "function") return midnightObj;
+
+    // 2. Known key names (mnLace, 1am-wallet, 1am, midnight, lace, etc.)
+    const knownKeys = ["mnLace", "1am-wallet", "1am", "midnight", "lace", "provider", "mn", "night"];
+    for (const key of knownKeys) {
+      if (midnightObj[key]) return midnightObj[key];
+    }
+
+    // 3. Any property on window.midnight
+    try {
+      const keys = Object.keys(midnightObj);
+      if (keys.length > 0 && midnightObj[keys[0]]) {
+        return midnightObj[keys[0]];
+      }
+    } catch {
+      // Ignore
+    }
+
+    // 4. Any property name including getters/proxies
+    try {
+      const propNames = Object.getOwnPropertyNames(midnightObj);
+      if (propNames.length > 0 && midnightObj[propNames[0]]) {
+        return midnightObj[propNames[0]];
+      }
+    } catch {
+      // Ignore
+    }
+
+    return midnightObj;
+  }, []);
+
   const discoverWallets = useCallback((): MidnightWalletApi[] => {
-    if (typeof window === "undefined" || !window.midnight) return [];
+    if (typeof window === "undefined") return [];
     const w = window as any;
     const found: MidnightWalletApi[] = [];
 
-    if (typeof w.midnight.enable === "function") {
-      found.push(w.midnight);
+    if (w.midnight) {
+      const p = resolveMidnightProvider(w.midnight);
+      if (p) found.push(p);
     }
-    Object.keys(w.midnight).forEach((key) => {
-      const provider = w.midnight[key];
-      if (provider && typeof provider.enable === "function") {
-        found.push(provider);
-      }
-    });
+    if (w.lace) found.push(w.lace);
+    if (w.cardano?.midnight) found.push(w.cardano.midnight);
 
     setAvailableWallets(found);
     return found;
-  }, []);
+  }, [resolveMidnightProvider]);
 
   useEffect(() => {
     discoverWallets();
@@ -64,61 +96,65 @@ export function useMidnight(): UseMidnightReturn {
     return () => clearInterval(interval);
   }, [discoverWallets]);
 
-  // Connect handler — ONLY real wallet connection (Zero dummy fallback string)
+  // Connect via real Midnight DApp Connector
   const connect = useCallback(async () => {
     setConnectionState({ status: "connecting" });
 
     try {
       const w = window as any;
 
-      console.log("[PrivPass] Scanning window object for Midnight provider...");
-      console.log("[PrivPass] window.midnight:", w.midnight);
+      console.log("[PrivPass] Injected window.midnight:", w.midnight);
 
       if (!w.midnight && !w.lace && !w.cardano?.midnight) {
         throw new Error(
-          "1AM / Midnight Wallet extension is not injected into `window.midnight` on this page (http://localhost:5173). Please check Chrome extension permissions."
+          "1AM / Midnight Wallet extension is not injected in Chrome window object. Please check if the extension is enabled."
         );
       }
 
-      let provider: any =
-        w.midnight?.mnLace ||
-        w.midnight?.["1am-wallet"] ||
-        w.midnight?.midnight ||
-        w.midnight?.["1am"] ||
-        (typeof w.midnight?.enable === "function" ? w.midnight : null);
-
-      if (!provider) {
-        const wallets = discoverWallets();
-        if (wallets.length > 0) provider = wallets[0];
-      }
-
+      // Resolve the provider object directly inside window.midnight
+      let provider = resolveMidnightProvider(w.midnight);
       if (!provider) provider = w.lace || w.cardano?.midnight;
 
-      if (!provider || typeof provider.enable !== "function") {
+      console.log("[PrivPass] Resolved target provider:", provider);
+
+      if (!provider) {
         throw new Error(
-          "Midnight wallet provider not found in window.midnight. Please ensure 1AM Wallet extension is enabled for all sites in chrome://extensions."
+          "Midnight wallet provider could not be resolved from window.midnight."
         );
       }
 
-      // THIS DIRECT CALL OPENS THE CHROME EXTENSION POPUP
-      const api = await provider.enable();
+      // CALL ENABLE() TO OPEN CHROME WALLET POPUP WINDOW
+      const enableMethod = provider.enable || provider.connect;
+
+      if (typeof enableMethod !== "function") {
+        console.log("[PrivPass] Provider object keys:", Object.keys(provider));
+        throw new Error(
+          "Wallet provider found in window.midnight but enable() function is not ready. Please unlock your 1AM Wallet extension in Chrome."
+        );
+      }
+
+      // EXECUTE ENABLE TO TRIGGER NATIVE POPUP WINDOW
+      const api = await enableMethod.call(provider);
+
+      console.log("[PrivPass] Obtained DApp Connector API:", api);
+
       const connectedNetwork = await api.networkId();
       const walletAddress = await api.getAddress();
 
       setConnectorApi(api);
       setConnectionState({
         status: "connected",
-        address: walletAddress, // REAL address from extension only
+        address: walletAddress, // REAL address from wallet extension
         network: connectedNetwork,
         walletName: provider.name || "1AM Wallet",
       });
     } catch (err) {
-      console.error("[PrivPass] Connect error:", err);
+      console.error("[PrivPass] Connection failed:", err);
       const message =
         err instanceof Error ? err.message : "1AM Wallet connection failed.";
       setConnectionState({ status: "error", error: message });
     }
-  }, [discoverWallets]);
+  }, [discoverWallets, resolveMidnightProvider]);
 
   const disconnect = useCallback(() => {
     setConnectorApi(null);
