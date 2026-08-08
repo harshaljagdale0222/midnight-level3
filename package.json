@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "setup": "node src/setup.mjs",
+    "wallet:gen": "node src/gen-seed.mjs",
     "compile": "compact compile contracts/privpass.compact -o contracts/managed",
     "deploy": "node src/deploy.mjs",
     "deploy:preview": "node src/deploy.mjs --network preview",
