@@ -1,0 +1,357 @@
+// =============================================================================
+// PrivPass – Privacy-Preserving Eligibility & Credential Verification
+// =============================================================================
+//
+// PRIVACY MODEL — What is PUBLIC vs PRIVATE
+// ─────────────────────────────────────────
+// PUBLIC  (on-chain, anyone can read):
+//   • issuerRegistry   : Map<Bytes<32>, Boolean>  – authorised issuer addresses
+//   • credentialHashes : Map<Bytes<32>, CredentialRecord> – hash of each
+//       credential + metadata (issuer, expiry, revoked flag).  The HASH
+//       commits to the credential without revealing its values.
+//   • eligibilityResults : Map<Bytes<32>, EligibilityRecord> – per-user,
+//       per-purpose pass/fail result.  Observers see only true/false.
+//   • contractOwner    : Bytes<32>  – deployer address
+//
+// PRIVATE (witness / never leaves the prover's machine):
+//   • credentialValue  – actual income (₹), age (years), or credit score
+//   • credentialSalt   – random blinding factor for the Pedersen commitment
+//   • rawCredentialHash – full pre-image used to build the commitment
+//
+// PROVED WITHOUT REVEALING:
+//   • "income  ≥ threshold" proven via proveIncomeEligibility circuit
+//   • "age     ≥ 18"        proven via proveAgeEligibility  circuit
+//   • "credit  ≥ 700"       proven via proveCreditEligibility circuit
+//   The verifier (contract) learns only true/false; the exact value is NEVER
+//   disclosed or logged.
+//
+// =============================================================================
+
+pragma language_version >= 0.14.0;
+
+import CompactStandardLibrary;
+
+// ─── Data Structures ─────────────────────────────────────────────────────────
+
+// Stores metadata for an issued credential on-chain (no raw values).
+struct CredentialRecord {
+  issuer     : Bytes<32>;   // PUBLIC: who issued this credential
+  holder     : Bytes<32>;   // PUBLIC: credential holder identifier
+  credType   : Uint<8>;     // PUBLIC: 0=income, 1=age, 2=credit, 3=identity
+  expiryBlock: Uint<64>;    // PUBLIC: block number after which credential expires
+  isRevoked  : Boolean;     // PUBLIC: revocation flag
+  valueHash  : Bytes<32>;   // PUBLIC: Pedersen commitment to the private value
+}
+
+// Stores a user's eligibility check result for a given purpose.
+struct EligibilityRecord {
+  holder     : Bytes<32>;   // PUBLIC: who was checked
+  purpose    : Bytes<16>;   // PUBLIC: e.g. "LOAN", "RENTAL", "AGE_GATE"
+  passed     : Boolean;     // PUBLIC: pass/fail only — value is NEVER stored
+  checkedAt  : Uint<64>;    // PUBLIC: block number of the proof verification
+}
+
+// ─── Ledger (Public State) ────────────────────────────────────────────────────
+
+ledger {
+  // The account that deployed the contract; can add/remove issuers
+  contractOwner : Bytes<32>;
+
+  // Authorized issuers: only these addresses may issue credentials
+  issuerRegistry : Map<Bytes<32>, Boolean>;
+
+  // Credential registry: credential_id → CredentialRecord
+  credentialHashes : Map<Bytes<32>, CredentialRecord>;
+
+  // Eligibility results: result_key → EligibilityRecord
+  // result_key = hash(holder || purpose)
+  eligibilityResults : Map<Bytes<32>, EligibilityRecord>;
+
+  // Total count of credentials issued (informational)
+  totalCredentials : Uint<64>;
+
+  // Total number of eligibility proofs verified
+  totalProofsVerified : Uint<64>;
+}
+
+// ─── Constructor ──────────────────────────────────────────────────────────────
+
+constructor(ownerAddress : Bytes<32>) {
+  ledger.contractOwner    = ownerAddress;
+  ledger.totalCredentials = 0;
+  ledger.totalProofsVerified = 0;
+}
+
+// ─── Issuer Management ───────────────────────────────────────────────────────
+
+// Allows the contract owner to register a trusted issuer.
+// Visibility: PUBLIC – the issuer address and its authorisation are on-chain.
+export circuit addIssuer(
+  callerAddress : Bytes<32>,
+  issuerAddress : Bytes<32>
+): [] {
+  require(callerAddress == ledger.contractOwner,
+          "Only contract owner can add issuers");
+  require(!ledger.issuerRegistry.member(issuerAddress),
+          "Issuer already registered");
+  ledger.issuerRegistry.insert(issuerAddress, true);
+}
+
+// Allows the contract owner to remove a trusted issuer.
+export circuit removeIssuer(
+  callerAddress : Bytes<32>,
+  issuerAddress : Bytes<32>
+): [] {
+  require(callerAddress == ledger.contractOwner,
+          "Only contract owner can remove issuers");
+  require(ledger.issuerRegistry.member(issuerAddress),
+          "Issuer not found");
+  ledger.issuerRegistry.insert(issuerAddress, false);
+}
+
+// ─── Credential Issuance ─────────────────────────────────────────────────────
+
+// An authorized issuer creates a credential for a holder.
+// PRIVATE: The actual credential value (income/age/credit) is committed via
+//          a Pedersen-style hash and NEVER stored in the clear.
+// PUBLIC:  Only the credential hash, issuer, holder, type, and expiry appear.
+export circuit issueCredential(
+  issuerAddress  : Bytes<32>,          // public: must be in issuerRegistry
+  holderAddress  : Bytes<32>,          // public: recipient
+  credentialType : Uint<8>,            // public: 0=income,1=age,2=credit,3=id
+  expiryBlock    : Uint<64>,           // public: expiry block
+  credentialId   : Bytes<32>,          // public: unique ID for this credential
+  // PRIVATE witness — the actual value and blinding salt
+  // These are ZK witnesses; they are PROVED over but never stored or emitted.
+  witness privateValue : Uint<64>,     // PRIVATE: e.g. actual income in ₹ lakhs
+  witness privateSalt  : Bytes<32>     // PRIVATE: random blinding factor
+): [] {
+  // Verify the issuer is authorised
+  require(ledger.issuerRegistry.member(issuerAddress),
+          "Issuer not authorised");
+  require(ledger.issuerRegistry.lookup(issuerAddress),
+          "Issuer is deactivated");
+
+  // Credential must not already exist
+  require(!ledger.credentialHashes.member(credentialId),
+          "Credential ID already exists");
+
+  // Expiry must be in the future (at least 1 block from now; we use a
+  // symbolic check since block height is not a builtin — callers must pass
+  // a valid future block).
+  require(expiryBlock > 0, "Invalid expiry block");
+
+  // Build a deterministic commitment to the private value.
+  // valueHash = hash(privateValue ++ privateSalt ++ holderAddress)
+  // This binds the value to the specific holder so credentials cannot be
+  // transferred or reused by another user.
+  const valuePreimage : Bytes<104> =
+    pad(8, privateValue as Bytes<8>)   ++
+    privateSalt                         ++
+    holderAddress;
+
+  // disclose() emits the hash publicly; the inputs remain private.
+  const commitment : Bytes<32> = disclose(persistentHash<Bytes<104>>(valuePreimage));
+
+  // Write the CredentialRecord to on-chain storage (all public metadata)
+  ledger.credentialHashes.insert(credentialId, CredentialRecord {
+    issuer     : issuerAddress,
+    holder     : holderAddress,
+    credType   : credentialType,
+    expiryBlock: expiryBlock,
+    isRevoked  : false,
+    valueHash  : commitment
+  });
+
+  ledger.totalCredentials = ledger.totalCredentials + 1;
+}
+
+// ─── Credential Revocation ───────────────────────────────────────────────────
+
+// An issuer can revoke a previously issued credential.
+export circuit revokeCredential(
+  issuerAddress : Bytes<32>,
+  credentialId  : Bytes<32>
+): [] {
+  require(ledger.credentialHashes.member(credentialId),
+          "Credential not found");
+
+  const record : CredentialRecord =
+    ledger.credentialHashes.lookup(credentialId);
+
+  require(record.issuer == issuerAddress,
+          "Only the issuing authority can revoke this credential");
+  require(!record.isRevoked, "Credential already revoked");
+
+  // Update revocation flag; everything else stays the same
+  ledger.credentialHashes.insert(credentialId, CredentialRecord {
+    issuer     : record.issuer,
+    holder     : record.holder,
+    credType   : record.credType,
+    expiryBlock: record.expiryBlock,
+    isRevoked  : true,
+    valueHash  : record.valueHash
+  });
+}
+
+// ─── ZK Eligibility Proofs ───────────────────────────────────────────────────
+// Each circuit below accepts a PRIVATE witness value, proves a predicate,
+// and publishes ONLY the boolean result.  The raw value is NEVER disclosed.
+
+// --
+// proveIncomeEligibility
+// Proves: income ≥ threshold (e.g. ₹5,00,000 = 500 in ₹ thousands)
+// PRIVATE: actual income in ₹ thousands (witness)
+// PUBLIC:  pass/fail result recorded on-chain
+// --
+export circuit proveIncomeEligibility(
+  holderAddress  : Bytes<32>,
+  credentialId   : Bytes<32>,
+  threshold      : Uint<64>,    // PUBLIC: the minimum income being tested
+  resultKey      : Bytes<32>,   // PUBLIC: key to store the result under
+  currentBlock   : Uint<64>,    // PUBLIC: current block for expiry check
+  // PRIVATE witnesses
+  witness actualIncome : Uint<64>,   // PRIVATE: real income — NEVER stored/emitted
+  witness privateSalt  : Bytes<32>   // PRIVATE: blinding factor matching commitment
+): Boolean {
+  // 1. Credential must exist and be valid
+  require(ledger.credentialHashes.member(credentialId),
+          "Credential not found");
+  const cred : CredentialRecord = ledger.credentialHashes.lookup(credentialId);
+
+  require(!cred.isRevoked,              "Credential has been revoked");
+  require(cred.holder == holderAddress, "Credential does not belong to caller");
+  require(cred.credType == 0,           "Credential type must be income (0)");
+  require(currentBlock <= cred.expiryBlock, "Credential has expired");
+
+  // 2. Verify the private value matches the on-chain commitment
+  //    (re-derive the commitment and compare — without revealing the value)
+  const valuePreimage : Bytes<104> =
+    pad(8, actualIncome as Bytes<8>) ++
+    privateSalt                       ++
+    holderAddress;
+  const recomputed : Bytes<32> = persistentHash<Bytes<104>>(valuePreimage);
+  require(recomputed == cred.valueHash,
+          "Credential value does not match commitment — invalid proof");
+
+  // 3. Evaluate the eligibility predicate (PRIVATE computation)
+  const eligible : Boolean = (actualIncome >= threshold);
+
+  // 4. Publicly disclose ONLY the boolean result
+  const publicResult : Boolean = disclose(eligible);
+
+  // 5. Record the result on-chain
+  ledger.eligibilityResults.insert(resultKey, EligibilityRecord {
+    holder    : holderAddress,
+    purpose   : pad(16, "INCOME"   as Bytes<6>),
+    passed    : publicResult,
+    checkedAt : currentBlock
+  });
+
+  ledger.totalProofsVerified = ledger.totalProofsVerified + 1;
+
+  return publicResult;
+}
+
+// --
+// proveAgeEligibility
+// Proves: age ≥ 18  without revealing the holder's actual age.
+// PRIVATE: actual age in years (witness)
+// PUBLIC:  pass/fail result recorded on-chain
+// --
+export circuit proveAgeEligibility(
+  holderAddress : Bytes<32>,
+  credentialId  : Bytes<32>,
+  resultKey     : Bytes<32>,
+  currentBlock  : Uint<64>,
+  // PRIVATE witnesses
+  witness actualAge   : Uint<64>,    // PRIVATE: real age — NEVER stored/emitted
+  witness privateSalt : Bytes<32>    // PRIVATE: blinding factor
+): Boolean {
+  require(ledger.credentialHashes.member(credentialId),
+          "Credential not found");
+  const cred : CredentialRecord = ledger.credentialHashes.lookup(credentialId);
+
+  require(!cred.isRevoked,              "Credential has been revoked");
+  require(cred.holder == holderAddress, "Credential does not belong to caller");
+  require(cred.credType == 1,           "Credential type must be age (1)");
+  require(currentBlock <= cred.expiryBlock, "Credential has expired");
+
+  // Re-derive commitment to verify the private value
+  const valuePreimage : Bytes<104> =
+    pad(8, actualAge as Bytes<8>) ++
+    privateSalt                    ++
+    holderAddress;
+  const recomputed : Bytes<32> = persistentHash<Bytes<104>>(valuePreimage);
+  require(recomputed == cred.valueHash,
+          "Credential value does not match commitment — invalid proof");
+
+  // Age ≥ 18 predicate (PRIVATE computation)
+  const eligible : Boolean = (actualAge >= 18);
+
+  // Disclose ONLY the boolean — age value stays private
+  const publicResult : Boolean = disclose(eligible);
+
+  ledger.eligibilityResults.insert(resultKey, EligibilityRecord {
+    holder    : holderAddress,
+    purpose   : pad(16, "AGE_GATE" as Bytes<8>),
+    passed    : publicResult,
+    checkedAt : currentBlock
+  });
+
+  ledger.totalProofsVerified = ledger.totalProofsVerified + 1;
+
+  return publicResult;
+}
+
+// --
+// proveCreditEligibility
+// Proves: credit score ≥ 700  without revealing the actual score.
+// PRIVATE: actual credit score (witness)
+// PUBLIC:  pass/fail result recorded on-chain
+// --
+export circuit proveCreditEligibility(
+  holderAddress : Bytes<32>,
+  credentialId  : Bytes<32>,
+  threshold     : Uint<64>,    // PUBLIC: e.g. 700
+  resultKey     : Bytes<32>,
+  currentBlock  : Uint<64>,
+  // PRIVATE witnesses
+  witness actualScore : Uint<64>,    // PRIVATE: real credit score — NEVER stored/emitted
+  witness privateSalt : Bytes<32>    // PRIVATE: blinding factor
+): Boolean {
+  require(ledger.credentialHashes.member(credentialId),
+          "Credential not found");
+  const cred : CredentialRecord = ledger.credentialHashes.lookup(credentialId);
+
+  require(!cred.isRevoked,              "Credential has been revoked");
+  require(cred.holder == holderAddress, "Credential does not belong to caller");
+  require(cred.credType == 2,           "Credential type must be credit (2)");
+  require(currentBlock <= cred.expiryBlock, "Credential has expired");
+
+  // Re-derive commitment
+  const valuePreimage : Bytes<104> =
+    pad(8, actualScore as Bytes<8>) ++
+    privateSalt                      ++
+    holderAddress;
+  const recomputed : Bytes<32> = persistentHash<Bytes<104>>(valuePreimage);
+  require(recomputed == cred.valueHash,
+          "Credential value does not match commitment — invalid proof");
+
+  // Credit score ≥ threshold predicate (PRIVATE computation)
+  const eligible : Boolean = (actualScore >= threshold);
+
+  // Disclose ONLY the boolean — score stays private
+  const publicResult : Boolean = disclose(eligible);
+
+  ledger.eligibilityResults.insert(resultKey, EligibilityRecord {
+    holder    : holderAddress,
+    purpose   : pad(16, "CREDIT"   as Bytes<6>),
+    passed    : publicResult,
+    checkedAt : currentBlock
+  });
+
+  ledger.totalProofsVerified = ledger.totalProofsVerified + 1;
+
+  return publicResult;
+}
