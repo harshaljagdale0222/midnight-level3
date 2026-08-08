@@ -1,5 +1,5 @@
 // =============================================================================
-// components/WalletConnect.tsx – Pure Direct 1AM Wallet Extension Connector UI
+// components/WalletConnect.tsx – Robust Button Event Handling for 1AM Wallet
 // =============================================================================
 
 import React from "react";
@@ -20,6 +20,14 @@ export const WalletConnect: React.FC<WalletConnectProps> = ({ midnight }) => {
   const truncateAddress = (addr: string) =>
     addr.length > 18 ? `${addr.slice(0, 8)}...${addr.slice(-6)}` : addr;
 
+  const handleConnectClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    connect().catch((err) => {
+      console.error("[PrivPass] Handled connect error:", err);
+    });
+  };
+
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
       {/* ── 1. Idle Status ────────────────────────────────────────────────── */}
@@ -27,19 +35,25 @@ export const WalletConnect: React.FC<WalletConnectProps> = ({ midnight }) => {
         <button
           id="btn-connect-wallet"
           className="btn btn-primary btn-sm"
-          onClick={() => connect()}
+          type="button"
+          onClick={handleConnectClick}
         >
           <span>⚡</span>
           Connect 1AM Wallet
         </button>
       )}
 
-      {/* ── 2. Connecting Status (Chrome Popup Active) ────────────────────── */}
+      {/* ── 2. Connecting Status ──────────────────────────────────────────── */}
       {connectionState.status === "connecting" && (
-        <button className="btn btn-primary btn-sm" disabled>
-          <div className="spinner" />
-          Opening 1AM Wallet Popup...
-        </button>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <button className="btn btn-primary btn-sm" disabled type="button">
+            <div className="spinner" />
+            Opening 1AM Wallet...
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={clearError} type="button">
+            Cancel
+          </button>
+        </div>
       )}
 
       {/* ── 3. Connected Status ───────────────────────────────────────────── */}
@@ -71,7 +85,7 @@ export const WalletConnect: React.FC<WalletConnectProps> = ({ midnight }) => {
             {truncateAddress(connectionState.address)}
           </span>
 
-          <button id="btn-disconnect" className="btn btn-ghost btn-sm" onClick={disconnect}>
+          <button id="btn-disconnect" className="btn btn-ghost btn-sm" onClick={disconnect} type="button">
             Disconnect
           </button>
         </div>
@@ -80,11 +94,11 @@ export const WalletConnect: React.FC<WalletConnectProps> = ({ midnight }) => {
       {/* ── 4. Connection Error Status ────────────────────────────────────── */}
       {connectionState.status === "error" && (
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <button className="btn btn-primary btn-sm" onClick={() => connect()} id="btn-retry-connect">
+          <button className="btn btn-primary btn-sm" onClick={handleConnectClick} id="btn-retry-connect" type="button">
             ⚡ Connect 1AM Wallet
           </button>
 
-          <button className="btn btn-ghost btn-sm" onClick={clearError}>
+          <button className="btn btn-ghost btn-sm" onClick={clearError} type="button">
             Dismiss
           </button>
         </div>

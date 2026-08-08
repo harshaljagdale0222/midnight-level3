@@ -1,5 +1,5 @@
 // =============================================================================
-// hooks/useMidnight.ts – Direct 1AM Wallet Extension Connector
+// hooks/useMidnight.ts – Robust Direct 1AM Wallet Extension Connector
 // =============================================================================
 
 import { useState, useCallback, useEffect } from "react";
@@ -40,19 +40,25 @@ export function useMidnight(): UseMidnightReturn {
 
   // Scan injected window.midnight object
   const discoverWallets = useCallback((): MidnightWalletApi[] => {
-    if (typeof window === "undefined" || !window.midnight) return [];
+    if (typeof window === "undefined") return [];
     const w = window as any;
     const found: MidnightWalletApi[] = [];
 
-    if (typeof w.midnight.enable === "function") {
-      found.push(w.midnight);
-    }
-    Object.keys(w.midnight).forEach((key) => {
-      const provider = w.midnight[key];
-      if (provider && typeof provider.enable === "function") {
-        found.push(provider);
+    if (w.midnight) {
+      if (typeof w.midnight.enable === "function") {
+        found.push(w.midnight);
       }
-    });
+      Object.keys(w.midnight).forEach((key) => {
+        const provider = w.midnight[key];
+        if (provider && typeof provider.enable === "function") {
+          found.push(provider);
+        }
+      });
+    }
+
+    if (w.lace && typeof w.lace.enable === "function") found.push(w.lace);
+    if (w.cardano?.midnight && typeof w.cardano.midnight.enable === "function")
+      found.push(w.cardano.midnight);
 
     setAvailableWallets(found);
     return found;
@@ -60,48 +66,66 @@ export function useMidnight(): UseMidnightReturn {
 
   useEffect(() => {
     discoverWallets();
-    const interval = setInterval(discoverWallets, 500);
+    const interval = setInterval(discoverWallets, 400);
     return () => clearInterval(interval);
   }, [discoverWallets]);
 
-  // DIRECT 1-CLICK EXTENSION POPUP TRIGGER
+  // Robust Direct Connect
   const connect = useCallback(async () => {
+    console.log("[PrivPass] Connect button clicked. Discovering Midnight provider...");
     setConnectionState({ status: "connecting" });
 
     try {
       const w = window as any;
 
-      // Find provider in window.midnight or retry up to 1 second
       let provider: any = null;
 
-      for (let attempt = 0; attempt < 10; attempt++) {
-        if (w.midnight) {
+      // Check all possible Midnight injected properties
+      if (w.midnight) {
+        if (typeof w.midnight.enable === "function") {
+          provider = w.midnight;
+        } else {
           provider =
             w.midnight.mnLace ||
             w.midnight["1am-wallet"] ||
             w.midnight.midnight ||
             w.midnight["1am"] ||
-            (typeof w.midnight.enable === "function" ? w.midnight : null);
+            w.midnight.lace;
 
           if (!provider) {
             const keys = Object.keys(w.midnight);
             if (keys.length > 0) provider = w.midnight[keys[0]];
           }
         }
-        if (!provider) provider = w.lace || w.cardano?.midnight;
-
-        if (provider && typeof provider.enable === "function") break;
-        await new Promise((r) => setTimeout(r, 100));
       }
+
+      if (!provider) provider = w.lace || w.cardano?.midnight;
+
+      console.log("[PrivPass] Target Midnight provider:", provider);
 
       if (!provider || typeof provider.enable !== "function") {
         throw new Error(
-          "1AM Wallet extension popup request failed. Please check if your 1AM Wallet extension is unlocked in Chrome."
+          "Midnight wallet extension not detected in window.midnight. Please make sure the 1AM / Lace extension is installed, enabled, and unlocked in Chrome."
         );
       }
 
-      // THIS DIRECT CALL LAUNCHES THE CHROME EXTENSION POPUP WINDOW
-      const api = await provider.enable();
+      // CALL NATIVE EXTENSION ENABLE POPUP
+      const enablePromise = provider.enable();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                "Wallet extension request timed out. Please click your 1AM / Lace Wallet extension icon in Chrome."
+              )
+            ),
+          12000
+        )
+      );
+
+      const api = (await Promise.race([enablePromise, timeoutPromise])) as MidnightConnectorApi;
+
+      console.log("[PrivPass] Connector API obtained:", api);
 
       const connectedNetwork = await api.networkId();
       const walletAddress = await api.getAddress();
@@ -114,11 +138,12 @@ export function useMidnight(): UseMidnightReturn {
         walletName: provider.name || "1AM Wallet",
       });
     } catch (err) {
+      console.error("[PrivPass] Connect failed:", err);
       const message =
-        err instanceof Error ? err.message : "1AM Wallet connection popup failed.";
+        err instanceof Error ? err.message : "1AM Wallet connection failed.";
       setConnectionState({ status: "error", error: message });
     }
-  }, []);
+  }, [discoverWallets]);
 
   const disconnect = useCallback(() => {
     setConnectorApi(null);
