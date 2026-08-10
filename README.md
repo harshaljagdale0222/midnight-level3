@@ -21,6 +21,12 @@
 
 ---
 
+## 🖥️ PrivPass Frontend UI Preview
+
+![PrivPass Zero-Knowledge DApp Frontend UI](./privpass_ui_preview.png)
+
+---
+
 ## 🔒 Observable Privacy Claim: "Proven Without Being Shown"
 
 PrivPass implements an observable privacy behavior using Midnight's native Zero-Knowledge Proof (Groth16) architecture:
