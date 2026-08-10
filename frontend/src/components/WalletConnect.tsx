@@ -35,7 +35,7 @@ export const WalletConnect: React.FC<WalletConnectProps> = ({ midnight }) => {
             onClick={openPopup}
           >
             <span>⚡</span>
-            Connect 1AM Wallet
+            Connect Lace Wallet
           </button>
         )}
 
@@ -43,7 +43,7 @@ export const WalletConnect: React.FC<WalletConnectProps> = ({ midnight }) => {
         {connectionState.status === "connecting" && (
           <button className="btn btn-primary btn-sm" disabled type="button">
             <div className="spinner" />
-            Connecting 1AM Wallet...
+            Connecting Lace Wallet...
           </button>
         )}
 
@@ -52,7 +52,7 @@ export const WalletConnect: React.FC<WalletConnectProps> = ({ midnight }) => {
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <span className="badge badge-success" id="badge-network">
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />
-              Preview
+              Preprod
             </span>
 
             <span
@@ -86,7 +86,7 @@ export const WalletConnect: React.FC<WalletConnectProps> = ({ midnight }) => {
         {connectionState.status === "error" && (
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <button className="btn btn-primary btn-sm" onClick={openPopup} id="btn-retry-connect" type="button">
-              ⚡ Connect 1AM Wallet
+              ⚡ Connect Lace Wallet
             </button>
             <button className="btn btn-ghost btn-sm" onClick={clearError} type="button">
               Dismiss
@@ -95,7 +95,7 @@ export const WalletConnect: React.FC<WalletConnectProps> = ({ midnight }) => {
         )}
       </div>
 
-      {/* ── REAL 1AM WALLET EXTENSION CONNECTION POPUP WINDOW MODAL ───────── */}
+      {/* ── REAL LACE WALLET EXTENSION CONNECTION POPUP WINDOW MODAL ───────── */}
       {isPopupVisible && (
         <div
           style={{
@@ -123,7 +123,7 @@ export const WalletConnect: React.FC<WalletConnectProps> = ({ midnight }) => {
               overflow: "hidden",
             }}
           >
-            {/* 1AM Wallet Popup Window Header */}
+            {/* Lace Wallet Popup Window Header */}
             <div
               style={{
                 background: "linear-gradient(135deg, #7c3aed, #2563eb)",
@@ -138,7 +138,7 @@ export const WalletConnect: React.FC<WalletConnectProps> = ({ midnight }) => {
                 <span style={{ fontSize: "1.5rem" }}>⚡</span>
                 <div>
                   <div style={{ fontWeight: 800, fontSize: "1.125rem", letterSpacing: "0.02em" }}>
-                    1AM Wallet
+                    Lace Midnight Wallet
                   </div>
                   <div style={{ fontSize: "0.75rem", opacity: 0.9 }}>
                     Midnight Network Connector
@@ -147,7 +147,7 @@ export const WalletConnect: React.FC<WalletConnectProps> = ({ midnight }) => {
               </div>
 
               <span className="badge" style={{ background: "rgba(255,255,255,0.2)", color: "#fff" }}>
-                Preview Testnet
+                Preprod Testnet
               </span>
             </div>
 
@@ -158,7 +158,7 @@ export const WalletConnect: React.FC<WalletConnectProps> = ({ midnight }) => {
                   Connect Request
                 </h3>
                 <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
-                  PrivPass DApp is requesting connection to your Midnight 1AM Wallet account.
+                  PrivPass DApp is requesting connection to your Lace Midnight Wallet extension.
                 </p>
               </div>
 
@@ -218,7 +218,7 @@ export const WalletConnect: React.FC<WalletConnectProps> = ({ midnight }) => {
                   type="button"
                   onClick={() => connect()}
                 >
-                  ⚡ Approve & Connect 1AM Wallet
+                  ⚡ Approve & Connect Lace Wallet
                 </button>
 
                 <button

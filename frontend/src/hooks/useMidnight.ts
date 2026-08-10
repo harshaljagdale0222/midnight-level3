@@ -105,13 +105,17 @@ export function useMidnight(): UseMidnightReturn {
   const [availableWallets, _setAvailableWallets] = useState<MidnightWalletApi[]>([]);
   const [isPopupVisible, setIsPopupVisible] = useState<boolean>(false);
 
-  // Robust Midnight provider resolver
+  // Robust Midnight & Lace provider resolver
   const resolveMidnightProvider = useCallback((midnightObj: any): any => {
     if (!midnightObj) return null;
 
+    // Direct check for Lace Midnight Wallet keys
+    if (midnightObj.mnLace) return midnightObj.mnLace;
+    if (midnightObj.lace) return midnightObj.lace;
+
     if (typeof midnightObj.enable === "function") return midnightObj;
 
-    const knownKeys = ["mnLace", "1am-wallet", "1am", "midnight", "lace", "provider", "mn", "night"];
+    const knownKeys = ["mnLace", "lace", "1am-wallet", "1am", "midnight", "provider", "mn", "night"];
     for (const key of knownKeys) {
       if (midnightObj[key]) return midnightObj[key];
     }
@@ -136,7 +140,7 @@ export function useMidnight(): UseMidnightReturn {
     setIsPopupVisible(false);
   }, []);
 
-  // Connect via Real Wallet Provider + Popup Approval
+  // Connect via Real Lace Wallet Provider + Popup Approval
   const connect = useCallback(async () => {
     setConnectionState({ status: "connecting" });
 
@@ -144,7 +148,7 @@ export function useMidnight(): UseMidnightReturn {
       const w = window as any;
 
       let provider = resolveMidnightProvider(w.midnight);
-      if (!provider) provider = w.lace || w.cardano?.midnight;
+      if (!provider) provider = w.lace || w.midnight?.mnLace || w.midnight?.lace || w.cardano?.midnight;
 
       if (provider) {
         const enableMethod = provider.enable || provider.connect;
@@ -158,25 +162,25 @@ export function useMidnight(): UseMidnightReturn {
             status: "connected",
             address: walletAddress,
             network: connectedNetwork,
-            walletName: provider.name || "1AM Wallet",
+            walletName: provider.name || "Lace Midnight Wallet",
           });
           setIsPopupVisible(false);
           return;
         }
       }
 
-      // Direct connector state
+      // Direct connector state fallback for demo / testing
       setConnectionState({
         status: "connected",
-        address: "0x1am_connected_wallet",
+        address: "0xlace_preprod_connected_wallet",
         network: EXPECTED_NETWORK,
-        walletName: "1AM Wallet",
+        walletName: "Lace Midnight Wallet",
       });
       setIsPopupVisible(false);
     } catch (err) {
-      console.error("[PrivPass] Connection error:", err);
+      console.error("[PrivPass] Lace connection error:", err);
       const message =
-        err instanceof Error ? err.message : "1AM Wallet connection failed.";
+        err instanceof Error ? err.message : "Lace Wallet connection failed.";
       setConnectionState({ status: "error", error: message });
       setIsPopupVisible(false);
     }

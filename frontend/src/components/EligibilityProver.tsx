@@ -214,8 +214,52 @@ export const EligibilityProver: React.FC<EligibilityProverProps> = ({
         </p>
 
         {/* MANDATORY Privacy Badge */}
-        <div className="privacy-tag" id="label-proved-without-revealing" style={{ marginBottom: "24px" }}>
-          <span>🔒</span> Proved without revealing your input
+        <div className="privacy-tag" id="label-proved-without-revealing" style={{ marginBottom: "20px" }}>
+          <span>🔒</span> Proved Without Revealing: Real {selectedType} value was proven on-chain without being disclosed!
+        </div>
+
+        {/* ── OBSERVABLE PRIVACY BEHAVIOR BREAKDOWN ── */}
+        <div
+          style={{
+            background: "var(--color-bg-input)",
+            border: "1px solid var(--color-border-glow)",
+            borderRadius: "var(--radius-lg)",
+            padding: "18px",
+            marginBottom: "24px",
+            textAlign: "left",
+          }}
+        >
+          <div style={{ fontWeight: 700, color: "var(--color-zk-cyan)", fontSize: "0.9375rem", marginBottom: "12px" }}>
+            🛡️ Observable Privacy Behavior (Proof Verification Invariant)
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            {/* Private Local Witness */}
+            <div style={{ background: "rgba(16, 185, 129, 0.08)", padding: "12px", borderRadius: "var(--radius-md)", border: "1px solid rgba(16, 185, 129, 0.25)" }}>
+              <div style={{ fontSize: "0.75rem", color: "var(--color-success)", fontWeight: 700, textTransform: "uppercase" }}>
+                🔒 Local Witness (Kept Secret)
+              </div>
+              <div style={{ fontSize: "1.125rem", fontWeight: 700, color: "#fff", marginTop: "4px" }}>
+                {privateInputValue} {selectedType === "income" ? "₹ (thousands)" : selectedType === "age" ? "years" : "pts"}
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginTop: "4px" }}>
+                Never transmitted to node, RPC, or wallet extensions.
+              </div>
+            </div>
+
+            {/* Public On-Chain State */}
+            <div style={{ background: "rgba(124, 58, 237, 0.08)", padding: "12px", borderRadius: "var(--radius-md)", border: "1px solid rgba(124, 58, 237, 0.25)" }}>
+              <div style={{ fontSize: "0.75rem", color: "var(--color-zk-violet)", fontWeight: 700, textTransform: "uppercase" }}>
+                🌐 On-Chain Public Ledger Record
+              </div>
+              <div style={{ fontSize: "1.125rem", fontWeight: 700, color: passed ? "var(--color-success)" : "var(--color-error)", marginTop: "4px" }}>
+                passed: {passed ? "true" : "false"}
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginTop: "4px" }}>
+                Only boolean result & Groth16 proof hash stored.
+              </div>
+            </div>
+          </div>
         </div>
 
         <div
@@ -229,7 +273,7 @@ export const EligibilityProver: React.FC<EligibilityProverProps> = ({
           }}
         >
           <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: "4px" }}>
-            On-Chain Verification Transaction Hash:
+            On-Chain Verification Transaction Hash (Preprod Network):
           </div>
           <div style={{ fontFamily: "monospace", fontSize: "0.8125rem", color: "var(--color-zk-cyan)", wordBreak: "break-all" }}>
             {proofState.txHash}

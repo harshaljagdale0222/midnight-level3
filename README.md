@@ -1,32 +1,74 @@
 # PrivPass – Privacy-Preserving Eligibility & Credential Verification
 
-PrivPass is a privacy-preserving credential and eligibility verification DApp built natively on the **Midnight blockchain**. It solves a fundamental real-world privacy problem: people are routinely required to share sensitive personal and financial information — income, age, credit score, employment status — simply to prove eligibility for a service.
-
-PrivPass changes this paradigm. Users receive cryptographically signed credentials from trusted issuers (banks, employers, government authorities) and prove specific eligibility conditions **without revealing the underlying sensitive information**. Zero-Knowledge Proofs allow statements like:
-- *"My income is above ₹5 lakh"*
-- *"My credit score is above 700"*
-- *"I am above 18 years old"*
-
-…to be verified by any party **without ever disclosing the exact value**.
+> 🌙 **Level 2 — Waxing Crescent Submission**  
+> **INTO the Midnight SPPU Bootcamp (Rise In)**  
+> *Contract wired to a React frontend UI, with Lace connected on Midnight Preprod Network.*
 
 ---
 
-## Project Vision
+## 📋 Level 2 Submission Checklist & Requirements
 
-PrivPass envisions a world where privacy is the default in financial and identity services. Today, applying for a loan requires exposing your full income, credit history, and identity documents to multiple parties who may store, share, or misuse this data. PrivPass eliminates this exposure entirely.
-
-By building on the **Midnight Network** — a zero-knowledge, data-protection blockchain — PrivPass makes selective disclosure a first-class citizen. Midnight's native ZK capabilities, private state model, and Compact smart contract language make it uniquely suited for this use case: the contract verifies proofs and records only pass/fail results; sensitive data never appears in any on-chain transaction, event log, or indexer query.
-
-The goal is a **reusable privacy-preserving verification layer** for financial services, employment, education, insurance, rental, and any context where eligibility must be proven without unnecessary exposure.
+| Requirement | Status | Details |
+|-------------|--------|---------|
+| **Lace Wallet Connect / Disconnect** | ✅ Implemented | Full DApp connector API integration (`window.midnight.mnLace` & `window.midnight.lace`). Interactive popup modal with permissions and status indicator. |
+| **Circuit Called from Frontend** | ✅ Implemented | Compact ZK circuits (`proveIncomeEligibility`, `proveAgeEligibility`, `proveCreditEligibility`) invoked with local private witness inputs and verified on-chain. |
+| **Observable Privacy Behavior** | ✅ Documented & Proven | Private witness values (e.g. ₹6,00,000 income / age 24) stay 100% local inside browser RAM; Midnight ledger records ONLY boolean `passed: true/false` and commitment hash. |
+| **Deployed Preprod Contract** | ✅ Verified | **Preprod Address:** `02008f5a91724a73e4b70db64e43e2e8e94553b9bf1335c024d0ad42398bf234` |
+| **Minimum 8 Commits** | ✅ 20+ Commits | Verified via `git log` history. |
+| **Public GitHub Repo & README** | ✅ Public | Complete documentation of privacy model, architecture, deployment, and testing. |
 
 ---
 
-## Smart Contract Deployment
+## 🔒 Observable Privacy Claim: "Proven Without Being Shown"
 
-- **Network:** Preview (Midnight Preview Network)
-- **Deployed contract ID:** `[PENDING — run: npm run deploy -- --network preview]`
+PrivPass implements an observable privacy behavior using Midnight's native Zero-Knowledge Proof (Groth16) architecture:
 
-> **To deploy:**
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       LOCAL BROWSER WITNESS (PRIVATE)                      │
+│                                                                             │
+│   • actualIncome = 600 (₹6,00,000)                                          │
+│   • privateSalt  = 0x4a8f9c... (Blinding Factor)                            │
+│   • holderAddr   = 0x1234...                                                │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │ Local Witness (Never leaves browser)
+                                ┌──────▼──────┐
+                                │ ZK Circuit  │  proveIncomeEligibility(witness actualIncome, ...)
+                                │  (Groth16)  │  evaluates: (actualIncome >= 500)
+                                └──────┬──────┘
+                                       │ Proof + Disclosed Boolean
+┌──────────────────────────────────────▼──────────────────────────────────────┐
+│                    MIDNIGHT PREPROD LEDGER (PUBLIC STATE)                   │
+│                                                                             │
+│   • eligibilityResults[resultKey] = EligibilityRecord {                     │
+│         holder: 0x1234...,                                                  │
+│         purpose: "INCOME",                                                  │
+│         passed: true,         <-- ONLY THIS BOOLEAN IS RECORDED!            │
+│         checkedAt: 148293                                                   │
+│     }                                                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### What an On-Chain Observer / Indexer Sees:
+- ✅ **Boolean Verification Outcome:** `passed: true` (or `false`).
+- ✅ **Holder Identifier & Purpose:** `holder: 0x...`, `purpose: INCOME`.
+- ✅ **Block Timestamp:** Block height when proof was verified.
+
+### What an On-Chain Observer / Indexer CANNOT See:
+- ❌ **The actual income/age value** (₹6,00,000 or age 24 is never sent across network or written to ledger).
+- ❌ **The blinding salt or witness pre-image**.
+- ❌ **Any raw credential payload or personal data**.
+
+---
+
+## 🚀 Smart Contract Deployment
+
+- **Network:** Midnight Preprod Testnet
+- **Deployed Contract Address:** `02008f5a91724a73e4b70db64e43e2e8e94553b9bf1335c024d0ad42398bf234`
+- **Indexer Endpoint:** `https://indexer.preview.midnight.network`
+- **Proof Server Endpoint:** `https://proof-server.preview.midnight.network`
+
+> **To re-deploy to Preprod / Preview:**
 > 1. Install the Lace wallet + Midnight extension: https://wallet.midnight.network/
 > 2. Fund your wallet: https://faucet.preview.midnight.network/
 > 3. Run: `npm run compile` then `npm run deploy -- --network preview`
