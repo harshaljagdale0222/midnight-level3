@@ -325,3 +325,5 @@ PrivPass uses Midnight's ZK (Zero-Knowledge) proofs to create **Confidential Cre
 ---
 
 *Built for the INTO the Midnight — SPPU Bootcamp (Rise In), 2026.*
+   
+ 
