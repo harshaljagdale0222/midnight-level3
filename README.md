@@ -1,12 +1,14 @@
 # PrivPass – Privacy-Preserving Eligibility & Credential Verification
 
-> 🌙 **Level 2 — Waxing Crescent Submission**  
+[![CI/CD Pipeline](https://github.com/harshaljagdale0222/midnight-level3/actions/workflows/ci.yml/badge.svg)](https://github.com/harshaljagdale0222/midnight-level3/actions/workflows/ci.yml)
+
+> 🌙 **Level 3 — First Quarter Submission**  
 > **INTO the Midnight SPPU Bootcamp (Rise In)**  
-> *Contract wired to a React frontend UI, with Lace connected on Midnight Preprod Network.*
+> *Production-grade dApp with tests, CI/CD, and a polished build on Midnight Preprod Network.*
 
 ---
 
-## 📋 Level 2 Submission Checklist & Requirements
+## 📋 Level 3 Submission Checklist & Requirements
 
 | Requirement | Status | Details |
 |-------------|--------|---------|
@@ -296,6 +298,25 @@ privpass/
 │   valueHash (commitment) | passed: true/false | issuer addr  │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Level 3 Product Proposal
+
+**Selected Idea:** Confidential Credentials / Eligibility Gate (Combined)
+
+### Problem Statement
+In traditional identity and credit systems, users are forced to disclose sensitive personal data (e.g., exact income, date of birth, or precise credit score) just to prove they meet a minimum threshold. This over-sharing leads to privacy loss and increases the risk of data breaches.
+
+### The Solution: PrivPass
+PrivPass uses Midnight's ZK (Zero-Knowledge) proofs to create **Confidential Credentials** that function as an **Eligibility Gate**. 
+- **Confidential Credentials:** A trusted issuer signs a credential (e.g., Income or Credit Score) and commits a cryptographic hash to the Midnight ledger. The actual value is securely stored *only* on the user's local device.
+- **Eligibility Gate:** When a service (like a landlord or a lender) requires proof of eligibility (e.g., Income > $50,000), the user generates a ZK proof locally. 
+- The smart contract verifies the proof against the on-chain commitment and records a simple boolean `passed: true/false`.
+
+### What an observer CAN and CANNOT learn
+- **CAN learn:** That a user participated in an eligibility check, the type of check (e.g., "INCOME"), and whether they passed or failed.
+- **CANNOT learn:** The user's actual income, exact age, or exact credit score. The private values never leave the user's browser, ensuring absolute data privacy.
 
 ---
 
