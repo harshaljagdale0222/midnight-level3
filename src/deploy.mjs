@@ -18,6 +18,8 @@ import { loadWalletSeed, displayWalletInfo } from "./wallet.mjs";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { createMidnightProvider } from '@midnight-ntwrk/midnight-js-wallet';
+import { ContractDeployer } from '@midnight-ntwrk/midnight-js-contracts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -83,38 +85,27 @@ async function deploy() {
 
   try {
     // ── Real deployment (requires Midnight SDK + running node) ────────────
-    // Uncomment after: npm install && npm run compile
-    //
-    // import { createMidnightProvider } from '@midnight-ntwrk/midnight-js-wallet';
-    // import { ContractDeployer } from '@midnight-ntwrk/midnight-js-contracts';
-    //
-    // const provider = await createMidnightProvider({
-    //   nodeUrl: network.nodeUrl,
-    //   seed,
-    // });
-    //
-    // const walletAddress = await provider.getAddress();
-    // displayWalletInfo(walletAddress);
-    //
-    // console.log('⏳  Deploying PrivPass contract...');
-    // console.log('    This may take 30–120 seconds on Preview Network.\n');
-    //
-    // const contract = await ContractDeployer.deploy(provider, {
-    //   contractPath: managedPath,
-    //   constructorArgs: [walletAddress],  // contractOwner = deployer
-    // });
-    //
-    // const contractAddress = contract.contractId;
-    // console.log(`\n✅  Contract deployed successfully!`);
-    // console.log(`    Contract ID: ${contractAddress}`);
-    // console.log(`    Network:     ${network.name}`);
-    // saveDeployedAddress(contractAddress, network.networkId);
-
-    // ── Simulation output (while SDK packages are being installed) ────────
-    console.log("\n⚠️   DEPLOYMENT SIMULATION MODE");
-    console.log("    The Midnight JS SDK packages need to be installed:");
-    console.log("    Run: npm install");
-    console.log("\n    After installing, re-run: npm run deploy -- --network preview");
+    const provider = await createMidnightProvider({
+      nodeUrl: network.nodeUrl,
+      seed,
+    });
+    
+    const walletAddress = await provider.getAddress();
+    displayWalletInfo(walletAddress);
+    
+    console.log('⏳  Deploying PrivPass contract...');
+    console.log('    This may take 30–120 seconds on Preview Network.\n');
+    
+    const contract = await ContractDeployer.deploy(provider, {
+      contractPath: managedPath,
+      constructorArgs: [walletAddress],  // contractOwner = deployer
+    });
+    
+    const contractAddress = contract.contractId;
+    console.log(`\n✅  Contract deployed successfully!`);
+    console.log(`    Contract ID: ${contractAddress}`);
+    console.log(`    Network:     ${network.name}`);
+    saveDeployedAddress(contractAddress, network.networkId);
     console.log("\n    When deployed, your output will look like:");
     console.log("    ✅  Contract deployed successfully!");
     console.log("    Contract ID: 0x1a2b3c...  ← paste this in README.md");

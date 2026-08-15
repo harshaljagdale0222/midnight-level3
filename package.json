@@ -4,6 +4,9 @@
   "description": "PrivPass – Privacy-Preserving Eligibility & Credential Verification on Midnight Network",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "frontend"
+  ],
   "scripts": {
     "setup": "node src/setup.mjs",
     "wallet:gen": "node src/gen-seed.mjs",
@@ -30,7 +33,9 @@
     "vitest": "^2.1.8",
     "@types/node": "^22.10.2"
   },
-  "optionalDependencies": {
+  "dependencies": {
+    "@midnight-ntwrk/midnight-js-network-provider": "^4.1.1",
+    "@midnight-ntwrk/dapp-connector-api": "^4.1.1",
     "@midnight-ntwrk/compact-runtime": "^0.16.0",
     "@midnight-ntwrk/midnight-js-contracts": "^4.1.1",
     "@midnight-ntwrk/midnight-js-types": "^4.1.1",
@@ -39,6 +44,7 @@
     "@midnight-ntwrk/midnight-js-wallet": "^4.1.1",
     "@midnight-ntwrk/midnight-js-testing": "^4.1.1"
   },
+  "optionalDependencies": {},
   "engines": {
     "node": ">=20.0.0"
   },
