@@ -27,6 +27,10 @@
 
 ![PrivPass Zero-Knowledge DApp Frontend UI](./privpass_ui_preview.png)
 
+## ✅ Test Execution Output (23 Passing)
+
+![Vitest Test Run Screenshot](./test-screenshot.png)
+
 ---
 
 ## 🔒 Observable Privacy Claim: "Proven Without Being Shown"
