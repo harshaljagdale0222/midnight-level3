@@ -13,7 +13,7 @@
 | Requirement | Status | Details |
 |-------------|--------|---------|
 | **Live Demo URL** | 🌐 **Live** | [https://credit-score-midnight.vercel.app](https://credit-score-midnight.vercel.app) |
-| **Demo Video (Loom)** | 🎥 **Recorded** | [Watch Demo Video on Loom](https://www.loom.com/share/7ce2b0d22798406f80a205d897712391) |
+| **Demo Video (Loom)** | 🎥 **Recorded** | [Watch Demo Video on Loom](https://www.loom.com/share/0fa0b88fd30740a8b6c6ab596ec5565a) |
 | **Lace Wallet Connect / Disconnect** | ✅ Implemented | Full DApp connector API integration (`window.midnight.mnLace` & `window.midnight.lace`). Interactive popup modal with permissions and status indicator. |
 | **Circuit Called from Frontend** | ✅ Implemented | Compact ZK circuits (`proveIncomeEligibility`, `proveAgeEligibility`, `proveCreditEligibility`) invoked with local private witness inputs and verified on-chain. |
 | **Observable Privacy Behavior** | ✅ Documented & Proven | Private witness values (e.g. ₹6,00,000 income / age 24) stay 100% local inside browser RAM; Midnight ledger records ONLY boolean `passed: true/false` and commitment hash. |
