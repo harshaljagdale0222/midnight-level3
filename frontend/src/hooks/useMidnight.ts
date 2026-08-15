@@ -8,7 +8,7 @@ import type {
   MidnightConnectorApi,
   MidnightWalletApi,
 } from "../types/midnight";
-import { DAppConnectorAPI } from '@midnight-ntwrk/dapp-connector-api';
+
 
 const EXPECTED_NETWORK = import.meta.env.VITE_NETWORK ?? "preview";
 const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS ?? "";
